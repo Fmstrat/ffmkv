@@ -21,5 +21,5 @@ ffmkv <input> <output>
 ```
 
 ## Credits
-- [Bash Inquirer Interface](https://raw.githubusercontent.com/tanhauhau/Inquirer.sh)
-- [FFMPEG Progress Monitor](https://gist.githubusercontent.com/pruperting/397509/raw/7f9e2335189a3baa0255cd562853d382f3624201/ffmpeg-progress.sh) (Originally based on, rewritten)
+- [Bash Inquirer Interface](https://www.github.com/tanhauhau/Inquirer.sh)
+- [FFMPEG Progress Monitor](https://gist.github.com/pruperting/397509/) (Originally based on, rewritten)
