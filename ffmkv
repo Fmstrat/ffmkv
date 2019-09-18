@@ -718,45 +718,6 @@ function menuFromArr() {
 
 # =============================================================
 
-function usage() {
-	echo "Usage: ffmkv [--preset '<preset>'] <input> <ouput>"
-  echo "Examples:"
-  echo "  ffmkv input.mkv output.mkv"
-  echo "  ffmkv --preset 'Up to 3840p, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv"
-	exit 1
-}
-
-if [ -z "$(which ffmpeg)" ]; then
-  echo "ffmpeg is required, exiting."
-  exit 1
-fi
-if [ -z "$(which ffprobe)" ]; then
-  echo "ffprobe is required, exiting."
-  exit 1
-fi
-if [ -z "$(ffmpeg -filters 2> /dev/null |grep zscale)" ]; then
-  echo "Your ffmpeg does not support zscale, please update from https://ffmpeg.org if you need to use HDR to SDR conversion or resolution changes."
-fi
-
-if [ "$#" != "2" ] && [ "$#" != "4" ]; then
-  usage
-fi
-
-if [ "$1" = "--preset" ]; then
-  PRESET="$2"
-  shift
-  shift
-  if [ "$#" != "2" ]; then
-    usage
-  fi
-fi
-
-round() {
-	echo $(printf %.$2f $(echo "scale=$2;(((10^$2)*$1)+0.5)/(10^$2)" | bc))
-}
-
-mkdir -p ~/.ffmkv/presets
-
 function mkPreset() {
   echo "
 # The video stream
@@ -838,6 +799,45 @@ mkPreset \
   "4" \
   "Preserve HDR color" \
   "${HOME}/.ffmkv/presets/Up to 3840p, original audio, 4GB per hour VBR, HDR"
+
+function usage() {
+	echo "Usage: ffmkv [--preset '<preset>'] <input> <ouput>"
+  echo "Examples:"
+  echo "  ffmkv input.mkv output.mkv"
+  echo "  ffmkv --preset 'Up to 3840p, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv"
+	exit 1
+}
+
+if [ -z "$(which ffmpeg)" ]; then
+  echo "ffmpeg is required, exiting."
+  exit 1
+fi
+if [ -z "$(which ffprobe)" ]; then
+  echo "ffprobe is required, exiting."
+  exit 1
+fi
+if [ -z "$(ffmpeg -filters 2> /dev/null |grep zscale)" ]; then
+  echo "Your ffmpeg does not support zscale, please update from https://ffmpeg.org if you need to use HDR to SDR conversion or resolution changes."
+fi
+
+if [ "$#" != "2" ] && [ "$#" != "4" ]; then
+  usage
+fi
+
+if [ "$1" = "--preset" ]; then
+  PRESET="$2"
+  shift
+  shift
+  if [ "$#" != "2" ]; then
+    usage
+  fi
+fi
+
+round() {
+	echo $(printf %.$2f $(echo "scale=$2;(((10^$2)*$1)+0.5)/(10^$2)" | bc))
+}
+
+mkdir -p ~/.ffmkv/presets
 
 if [ -z "${PRESET}" ]; then
   USEPRESETS=(Yes No)
