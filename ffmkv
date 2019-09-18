@@ -718,20 +718,148 @@ function menuFromArr() {
 
 # =============================================================
 
-if [ -z "$2" ]; then
-	echo "Usage: ffmkv <input> <ouput>"
+function usage() {
+	echo "Usage: ffmkv [--preset '<preset>'] <input> <ouput>"
+  echo "Examples:"
+  echo "  ffmkv input.mkv output.mkv"
+  echo "  ffmkv --preset 'Up to 3840p, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv"
 	exit 1
+}
+
+if [ -z "$(which ffmpeg)" ]; then
+  echo "ffmpeg is required, exiting."
+  exit 1
+fi
+if [ -z "$(which ffprobe)" ]; then
+  echo "ffprobe is required, exiting."
+  exit 1
+fi
+if [ -z "$(ffmpeg -filters 2> /dev/null |grep zscale)" ]; then
+  echo "Your ffmpeg does not support zscale, please update from https://ffmpeg.org if you need to use HDR to SDR conversion or resolution changes."
+fi
+
+if [ "$#" != "2" ] && [ "$#" != "4" ]; then
+  usage
+fi
+
+if [ "$1" = "--preset" ]; then
+  PRESET="$2"
+  shift
+  shift
+  if [ "$#" != "2" ]; then
+    usage
+  fi
 fi
 
 round() {
 	echo $(printf %.$2f $(echo "scale=$2;(((10^$2)*$1)+0.5)/(10^$2)" | bc))
 }
 
-IFS=$'\r\n' GLOBIGNORE='*' command eval  'VIDEOS=($(ffmpeg -i "$1" 2>&1 |grep Stream |grep Video |sed "s/^[ \t]*//"))'
-menuFromArr VIDEO "Which video stream?" "${VIDEOS[@]}"
-VIDEO=${VIDEO##*#}
-VIDEO=${VIDEO%%\: *}
-VIDEO=${VIDEO%%(*}
+mkdir -p ~/.ffmkv/presets
+
+function mkPreset() {
+  echo "
+# The video stream
+VIDEO=${1}
+
+# The audio stream
+AUDIO=${2}
+
+# How to handle the video conversion
+VIDEOFORMAT='${3}'
+
+# How to handle the audio conversion
+AUDIOBITRATE='${4}'
+
+# Type of Full or Sample
+TYPE=${5}
+
+# If sample, the sample length in seconds
+SAMPLELENGTH=${6}
+
+# How to handle subtitles
+SUB=${7}
+
+# The video resolution by width. This will scale the video down to
+# the specified resolution width, keeping the aspect ration. It will
+# not scale the video up.
+# Can be one of: existing, 3840, 1920, 1280
+MAXWIDTH=${8}
+
+# How to target the file size
+CONVERTTYPE='${9}'
+
+# How big should the target be in GB
+GBSIZE=${10}
+
+# How to handle HDR if it exists in the source
+COLORTYPE='${11}'
+" > "${12}"
+}
+
+mkPreset \
+  "0:0" \
+  "0:1" \
+  "Transcode to x265 with a 1-pass constant bitrate" \
+  "192" \
+  "Full" \
+  "15" \
+  "Yes" \
+  "1920" \
+  "Target by gigs per hour of video" \
+  "1" \
+  "Convert to SDR color" \
+  "${HOME}/.ffmkv/presets/Up to 1080p, 192k audio, 1GB per hour CBR, SDR"
+
+mkPreset \
+  "0:0" \
+  "0:1" \
+  "Transcode to x265 with a 2-pass variable bitrate" \
+  "Stream copy" \
+  "Full" \
+  "15" \
+  "Yes" \
+  "1920" \
+  "Target by gigs per hour of video" \
+  "2" \
+  "Preserve HDR color" \
+  "${HOME}/.ffmkv/presets/Up to 1080p, original audio, 2GB per hour VBR, HDR"
+
+mkPreset \
+  "0:0" \
+  "0:1" \
+  "Transcode to x265 with a 2-pass variable bitrate" \
+  "Stream copy" \
+  "Full" \
+  "15" \
+  "Yes" \
+  "3840" \
+  "Target by gigs per hour of video" \
+  "4" \
+  "Preserve HDR color" \
+  "${HOME}/.ffmkv/presets/Up to 3840p, original audio, 4GB per hour VBR, HDR"
+
+if [ -z "${PRESET}" ]; then
+  USEPRESETS=(Yes No)
+  menuFromArr USEPRESET "Use a preset?" "${USEPRESETS[@]}"
+  if [ "${USEPRESET}" = "Yes" ]; then
+    cd ~/.ffmkv/presets
+    PRESETS=(*)
+    cd -
+    menuFromArr PRESET "Which preset?" "${PRESETS[@]}"
+  fi
+fi
+if [ -n "${PRESET}" ]; then
+    . "${HOME}/.ffmkv/presets/${PRESET}"
+fi
+
+if [ -z "${VIDEO}" ]; then
+  IFS=$'\r\n' GLOBIGNORE='*' command eval  'VIDEOS=($(ffmpeg -i "$1" 2>&1 |grep Stream |grep Video |sed "s/^[ \t]*//"))'
+  menuFromArr VIDEO "Which video stream?" "${VIDEOS[@]}"
+  VIDEO=${VIDEO##*#}
+  VIDEO=${VIDEO%%\: *}
+  VIDEO=${VIDEO%%(*}
+fi
 
 CURVIDEOBITRATE=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^bit_rate=")
 CURVIDEOBITRATE=${CURVIDEOBITRATE##*=}
@@ -747,18 +875,24 @@ else
 	CURVIDEOBITRATE=""
 fi
 
-VIDEOFORMATS=("Transcode to x265 with a 2-pass variable bitrate" "Transcode to x265 with a 1-pass constant bitrate" "${SC}")
-menuFromArr VIDEOFORMAT "How would you like to handle video conversion?" "${VIDEOFORMATS[@]}"
+if [ -z "${VIDEOFORMAT}" ]; then
+  VIDEOFORMATS=("Transcode to x265 with a 2-pass variable bitrate" "Transcode to x265 with a 1-pass constant bitrate" "${SC}")
+  menuFromArr VIDEOFORMAT "How would you like to handle video conversion?" "${VIDEOFORMATS[@]}"
+fi
 
-IFS=$'\r\n' GLOBIGNORE='*' command eval  'AUDIOS=($(ffmpeg -i "$1" 2>&1 |grep Stream |grep Audio |sed "s/^[ \t]*//"))'
-menuFromArr AUDIO "Which audio stream?" "${AUDIOS[@]}"
-AUDIO=${AUDIO##*#}
-AUDIO=${AUDIO%%\: *}
-AUDIO=${AUDIO%%(*}
+if [ -z "${AUDIO}" ]; then
+  IFS=$'\r\n' GLOBIGNORE='*' command eval  'AUDIOS=($(ffmpeg -i "$1" 2>&1 |grep Stream |grep Audio |sed "s/^[ \t]*//"))'
+  menuFromArr AUDIO "Which audio stream?" "${AUDIOS[@]}"
+  AUDIO=${AUDIO##*#}
+  AUDIO=${AUDIO%%\: *}
+  AUDIO=${AUDIO%%(*}
+fi
 
 CHANNELLAYOUT=$(ffprobe -show_streams -select_streams ${AUDIO#*:} "${1}" 2> /dev/null |grep "^channel_layout=")
-CHANNELLAYOUT=${CHANNELLAYOUT##*=}
-CHANNELLAYOUT=${CHANNELLAYOUT%%(*}
+if [ "$CHANNELLAYOUT" != "unknown" ]; then
+  CHANNELLAYOUT=${CHANNELLAYOUT##*=}
+  CHANNELLAYOUT=${CHANNELLAYOUT%%(*}
+fi
 
 CURAUDIOBITRATE=$(ffprobe -show_streams -select_streams ${AUDIO#*:} "${1}" 2> /dev/null |grep "^bit_rate=")
 CURAUDIOBITRATE=${CURAUDIOBITRATE##*=}
@@ -774,32 +908,45 @@ else
 	CURAUDIOBITRATE=""
 fi
 
-AUDIOBITRATES=("128 (kbps ${CHANNELLAYOUT} channel)" "160 (kbps ${CHANNELLAYOUT} channel)" "192 (kbps ${CHANNELLAYOUT} channel)" "384 (kbps ${CHANNELLAYOUT} channel)" "${SC}")
-menuFromArr AUDIOBITRATE "How would you like to handle audio conversion?" "${AUDIOBITRATES[@]}"
-AUDIOBITRATE=${AUDIOBITRATE%% (*}
+if [ -z "${AUDIOBITRATE}" ]; then
+  AUDIOBITRATES=("128 (kbps ${CHANNELLAYOUT} channel)" "160 (kbps ${CHANNELLAYOUT} channel)" "192 (kbps ${CHANNELLAYOUT} channel)" "384 (kbps ${CHANNELLAYOUT} channel)" "${SC}")
+  menuFromArr AUDIOBITRATE "How would you like to handle audio conversion?" "${AUDIOBITRATES[@]}"
+  AUDIOBITRATE=${AUDIOBITRATE%% (*}
+fi
 
 if [ "Stream copy" = "${AUDIOBITRATE}" ]; then
 	AUDIOCMD="-c:a copy"
 else
-	AUDIOCMD="-c:a aac -b:a ${AUDIOBITRATE}k -af 'channelmap=channel_layout=${CHANNELLAYOUT}'"
+  if [ "$CHANNELLAYOUT" != "unknown" ]; then
+	  AUDIOCMD="-c:a aac -b:a ${AUDIOBITRATE}k -af 'channelmap=channel_layout=${CHANNELLAYOUT}'"
+  else
+	  AUDIOCMD="-c:a aac -b:a ${AUDIOBITRATE}k"
+  fi
 fi
 
 SECONDS=$(ffmpeg -i "$1" 2>&1 |grep Duration | cut -d ' ' -f 4 | sed s/,// | sed 's@\..*@@g' | awk '{ split($1, A, ":"); split(A[3], B, "."); print 3600*A[1] + 60*A[2] + B[1] }')
 FPS=( $(ffmpeg -i "$1" 2>&1 | sed -n "s/.*, \(.*\) tbr.*/\1/p") )
 FRAMES=$(round $SECONDS*$FPS 0)
 
-TYPES=(Sample Full)
-menuFromArr TYPE "Make a 2 minute sample or process the full file?" "${TYPES[@]}"
+if [ -z "${TYPE}" ]; then
+  TYPES=(Sample Full)
+  menuFromArr TYPE "Make a 2 minute sample or process the full file?" "${TYPES[@]}"
+fi
 if [ "${TYPE}" = "Sample" ]; then
 	SAMPLELENGTHS=(15 30 60 90 120)
-	menuFromArr SAMPLELENGTH "What sample length (in seconds)?" "${SAMPLELENGTHS[@]}"
+  if [ -z "${SAMPLELENGTH}" ]; then
+  	SAMPLELENGTHS=(15 30 60 90 120)
+	  menuFromArr SAMPLELENGTH "What sample length (in seconds)?" "${SAMPLELENGTHS[@]}"
+  fi
 	FRAMES=$(round ${FPS}*${SAMPLELENGTH} 0)
 	START="-ss 00:10:00"
 	LENGTH="-t ${SAMPLELENGTH}"
 fi
 
-SUBS=(Yes No)
-menuFromArr SUB "Copy subtitles if they exist?" "${SUBS[@]}"
+if [ -z "${SUB}" ]; then
+  SUBS=(Yes No)
+  menuFromArr SUB "Copy subtitles if they exist?" "${SUBS[@]}"
+fi
 if [ "$SUB" = "Yes" ]; then
 	SUB="-map 0:s? -c:s copy"
 else
@@ -818,62 +965,77 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 	ASPECT=${ASPECT##*=}
 	ASPECTWIDTH=${ASPECT%:*}
 	ASPECTHEIGHT=${ASPECT#*:}
-	RESOLUTIONS=()
-	if (( WIDTH >= 7680 )); then
-		NEWHEIGHT=$(round 7680/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
-		RESOLUTIONS+=("7680x${NEWHEIGHT}")
-		if [ "${WIDTH}" = 7680 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
-			FOUNDRES=true
-		fi
-	fi
-	if (( WIDTH >= 3840 )); then
-		NEWHEIGHT=$(round 3840/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
-		RESOLUTIONS+=("3840x${NEWHEIGHT}")
-		if [ "${WIDTH}" = 3840 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
-			FOUNDRES=true
-		fi
-	fi
-	if (( WIDTH >= 2560 )); then
-		NEWHEIGHT=$(round 2560/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
-		RESOLUTIONS+=("2560x${NEWHEIGHT}")
-		if [ "${WIDTH}" = 2560 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
-			FOUNDRES=true
-		fi
-	fi
-	if (( WIDTH >= 1920 )); then
-		NEWHEIGHT=$(round 1920/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
-		RESOLUTIONS+=("1920x${NEWHEIGHT}")
-		if [ "${WIDTH}" = 1920 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
-			FOUNDRES=true
-		fi
-	fi
-	if (( WIDTH >= 1280 )); then
-		NEWHEIGHT=$(round 1280/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
-		RESOLUTIONS+=("1280x${NEWHEIGHT}")
-		if [ "${WIDTH}" = 1280 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
-			FOUNDRES=true
-		fi
-	fi
-	if [ -z "${FOUNDRES}" ]; then
-		RESOLUTIONS+=("${WIDTH}x${HEIGHT}")
-	fi
-	menuFromArr RESOLUTION "What resolution?" "${RESOLUTIONS[@]}"
-	NEWWIDTH=${RESOLUTION%x*}
-	NEWHEIGHT=${RESOLUTION#*x}
+  if [ -z "${MAXWIDTH}" ]; then
+    RESOLUTIONS=()
+    if (( WIDTH >= 7680 )); then
+      NEWHEIGHT=$(round 7680/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+      RESOLUTIONS+=("7680x${NEWHEIGHT}")
+      if [ "${WIDTH}" = 7680 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+        FOUNDRES=true
+      fi
+    fi
+    if (( WIDTH >= 3840 )); then
+      NEWHEIGHT=$(round 3840/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+      RESOLUTIONS+=("3840x${NEWHEIGHT}")
+      if [ "${WIDTH}" = 3840 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+        FOUNDRES=true
+      fi
+    fi
+    if (( WIDTH >= 2560 )); then
+      NEWHEIGHT=$(round 2560/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+      RESOLUTIONS+=("2560x${NEWHEIGHT}")
+      if [ "${WIDTH}" = 2560 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+        FOUNDRES=true
+      fi
+    fi
+    if (( WIDTH >= 1920 )); then
+      NEWHEIGHT=$(round 1920/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+      RESOLUTIONS+=("1920x${NEWHEIGHT}")
+      if [ "${WIDTH}" = 1920 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+        FOUNDRES=true
+      fi
+    fi
+    if (( WIDTH >= 1280 )); then
+      NEWHEIGHT=$(round 1280/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+      RESOLUTIONS+=("1280x${NEWHEIGHT}")
+      if [ "${WIDTH}" = 1280 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+        FOUNDRES=true
+      fi
+    fi
+    if [ -z "${FOUNDRES}" ]; then
+      RESOLUTIONS+=("${WIDTH}x${HEIGHT}")
+    fi
+    menuFromArr RESOLUTION "What resolution?" "${RESOLUTIONS[@]}"
+    NEWWIDTH=${RESOLUTION%x*}
+    NEWHEIGHT=${RESOLUTION#*x}
+  else
+    if (( WIDTH <= MAXWIDTH )); then
+      NEWWIDTH=${WIDTH}
+      NEWHEIGHT=${HEIGHT}
+    else
+      NEWWIDTH=${MAXWIDTH}
+      NEWHEIGHT=$(round ${MAXWIDTH}/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+    fi
+  fi
 	if [ "${WIDTH}" != "${NEWWIDTH}" ] || [ "${HEIGHT}" != "${NEWHEIGHT}" ]; then
-		SCALE="-vf scale='${NEWWIDTH}:${NEWHEIGHT}'"
+		#SCALE="scale=${NEWWIDTH}:${NEWHEIGHT}"
+		SCALE="zscale=w=${NEWWIDTH}:h=${NEWHEIGHT}"
 	fi
 
-	CONVERTTYPES=("Target a total file size" "Target by gigs per hour of video")
-	menuFromArr CONVERTTYPE "How would you like to convert?" "${CONVERTTYPES[@]}"
+  if [ -z "${CONVERTTYPE}" ]; then
+	  CONVERTTYPES=("Target a total file size" "Target by gigs per hour of video")
+	  menuFromArr CONVERTTYPE "How would you like to convert?" "${CONVERTTYPES[@]}"
+  fi
 
-	if [ "${CONVERTTYPE}" = "Target a total file size" ]; then
-		GBSIZES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
-		menuFromArr GBSIZE "How many GB for final size?" "${GBSIZES[@]}"
-	else
-		GBSIZES=(1 2 3 4 5 6)
-		menuFromArr GBSIZE "How many GB per hour of video?" "${GBSIZES[@]}"
-	fi
+  if [ -z "${GBSIZE}" ]; then
+    if [ "${CONVERTTYPE}" = "Target a total file size" ]; then
+      GBSIZES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      menuFromArr GBSIZE "How many GB for final size?" "${GBSIZES[@]}"
+    else
+      GBSIZES=(1 2 3 4 5 6)
+      menuFromArr GBSIZE "How many GB per hour of video?" "${GBSIZES[@]}"
+	  fi
+  fi
 
 	if [ "${CONVERTTYPE}" = "Target a total file size" ]; then
 		MEGSIZE=$(( $GBSIZE * 1024 ))
@@ -904,29 +1066,39 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 	# Handle HDR
 	PARAMS=""
 	if [ "${COLORSPACE}" = "bt2020nc" ] && [ "${COLORTRANSFER}" = "smpte2084" ] && [ "${COLORPRIMARIES}" = "bt2020" ]; then
-		COLORTYPES=("Preserve HDR color" "Convert to SDR color")
-		menuFromArr COLORTYPE "This is an HDR video, how would you like to handle color?" "${COLORTYPES[@]}"
+    if [ -z "${COLORTYPE}" ]; then
+		  COLORTYPES=("Preserve HDR color" "Convert to SDR color")
+		  menuFromArr COLORTYPE "This is an HDR video, how would you like to handle color?" "${COLORTYPES[@]}"
+    fi
 		if [ "${COLORTYPE}" = "Preserve HDR color" ]; then
 			PARAMS="colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
 		else
-			SDR="-vf 'zscale=transfer=linear,tonemap=tonemap=clip:param=1.0:desat=2:peak=0,zscale=transfer=bt709,format=yuv420p'"
+			SDR="zscale=transfer=linear,tonemap=tonemap=clip:param=1.0:desat=2:peak=0,zscale=transfer=bt709,format=yuv420p"
 		fi
 	fi
+
+  if [ -n "${SDR}" ] && [ -n "${SCALE}" ]; then
+    VIDEOFILTERS="-vf '${SCALE},${SDR}'"
+  elif [ -n "${SCALE}" ]; then
+    VIDEOFILTERS="-vf '${SCALE}'"
+  elif [ -n "${SDR}" ]; then
+    VIDEOFILTERS="-vf '${SDR}'"
+  fi
 
 	if [[ "${VIDEOFORMAT}" == *"variable bitrate" ]]; then
 		if [ -n "${PARAMS}" ]; then
 			PARAMS=":${PARAMS}"
 		fi
 		trans() {
-			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 -an -f matroska /dev/null
-			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
 		}
 		echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
 		echo "Process will sit on 100% while ffmpeg closes out functions."
 		convertFile "$1" "$2" Pass1
 		trans() {
-			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
-			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 		}
 		echo ""
 		echo "Processing pass 2 of VBR video, remaining time is total remaining time."
@@ -937,8 +1109,8 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 			PARAMS="-x265-params '${PARAMS}'"
 		fi
 		trans() {
-			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
-			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${SCALE} ${SDR} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 		}
 		echo ""
 		echo "Processing pass of CBR video, remaining time is total remaining time."
