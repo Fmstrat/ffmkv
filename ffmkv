@@ -6,6 +6,9 @@
 # (6144 MiB * 8192 [converts MiB to kBit]) / 6240 seconds = ~8066 kBit/s total bitrate
 # 8066 - 640 kBit/s (desired audio bitrate) = 7426 kBit/s video bitrate
 
+{
+
+TIMESTAMP=$(date "+%Y%m%d-%H%M%S.%N")
 
 #======== Based on https://raw.githubusercontent.com/tanhauhau/Inquirer.sh/master/dist/inquirer.sh ========
 
@@ -652,7 +655,7 @@ text_input() {
 
 progress() {
 	sleep 10
-	LASTLINE=$(cat -v /tmp/ffmkv/ffmpeg.log | tr '^M' '\n' | grep frame= | tail -n 1)
+	LASTLINE=$(cat -v /tmp/ffmkv/${TIMESTAMP}/ffmpeg_${1}.log | tr '^M' '\n' | grep frame= | tail -n 1)
 	CFRAME=${LASTLINE##*frame=}
 	CFRAME=$(echo $CFRAME)
 	CFRAME=${CFRAME%% *}
@@ -663,16 +666,16 @@ progress() {
 	TOTAL=$(round ${FRAMES}+${CFRAME}+${CPERCENT}+${CFPS} 0)
 	# Check to make sure all are numbers
 	if [ $TOTAL -eq $TOTAL 2> /dev/null ]; then
-		if [ "$FPS" = "0" ]; then
-			echo -ne "\rffmpeg: $CFRAME of $FRAMES frames, progress: $CPERCENT"%" and ETA: error fps:0     "
+		if [ "$CFPS" = "0" ]; then
+			echo -ne "\rffmpeg: $CFRAME of $FRAMES frames at $CFPS fps, progress: $CPERCENT"%" and ETA: error                "
 		else
 			REMAINING=$(( FRAMES - CFRAME ))
-			SECONDS=$(round ${REMAINING}/${FPS} 0)
+			SECONDS=$(round ${REMAINING}/${CFPS} 0)
 			H=$(round ${SECONDS}/3600 0)
 			M=$(round ${SECONDS}/60 0)
 			M=$(( M % 60 ))
 			S=$(( SECONDS % 60 ))
-			echo -ne "\rffmpeg: $CFRAME of $FRAMES frames, progress: $CPERCENT"%" and ETA: "$H"h "$M"m "$S"s     "
+			echo -ne "\rffmpeg: $CFRAME of $FRAMES frames at $CFPS fps, progress: $CPERCENT"%" and ETA: "$H"h "$M"m "$S"s     "
 		fi
 	else
 		echo "Error, one of the values wasn't a number, trying again in 10s..."
@@ -680,15 +683,13 @@ progress() {
 }
 
 function convertFile() {
-	rm -rf /tmp/ffmkv
-	mkdir -p /tmp/ffmkv
 	echo ffmpeg conversion of "$1" started on `date "+%m/%d/%y %l:%M:%S %p"`
 	echo ""$1" has $FRAMES frames, now converting"
-	trans "$1" "$2" &>> /tmp/ffmkv/ffmpeg.log &
+	trans "$1" "$2" &>> /tmp/ffmkv/${TIMESTAMP}/ffmpeg_${3}.log &
 	PID=$!
 	CFRAME=1
 	while [ -e /proc/$PID ]; do
-		progress
+		progress $3
 	done
 	echo ""
 	echo ffmpeg stopped on `date "+%m/%d/%y %l:%M:%S %p"`
@@ -732,16 +733,21 @@ VIDEO=${VIDEO##*#}
 VIDEO=${VIDEO%%\: *}
 VIDEO=${VIDEO%%(*}
 
-CURVIDEOBITRATE=$(ffprobe -show_streams -select_streams a:$VIDEO "${1}" 2> /dev/null |grep "^bit_rate=")
+CURVIDEOBITRATE=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^bit_rate=")
 CURVIDEOBITRATE=${CURVIDEOBITRATE##*=}
-CURVIDEOBITRATE=${CURVIDEOBITRATE::-3}
-if [ -n "${CURVIDEOBITRATE}" ]; then
-	SC="Stream copy (${CURVIDEOBITRATE}kbps)"
+if [ "${CURVIDEOBITRATE}" != "N\/A" ]; then
+	CURVIDEOBITRATE=${CURVIDEOBITRATE::-3}
+	if [ -n "${CURVIDEOBITRATE}" ]; then
+		SC="Stream copy (${CURVIDEOBITRATE}kbps)"
+	else
+		SC="Stream copy (VBR)"
+	fi
 else
 	SC="Stream copy (VBR)"
+	CURVIDEOBITRATE=""
 fi
 
-VIDEOFORMATS=("Transcode to x265 with a new variable bitrate" "${SC}")
+VIDEOFORMATS=("Transcode to x265 with a 2-pass variable bitrate" "Transcode to x265 with a 1-pass constant bitrate" "${SC}")
 menuFromArr VIDEOFORMAT "How would you like to handle video conversion?" "${VIDEOFORMATS[@]}"
 
 IFS=$'\r\n' GLOBIGNORE='*' command eval  'AUDIOS=($(ffmpeg -i "$1" 2>&1 |grep Stream |grep Audio |sed "s/^[ \t]*//"))'
@@ -750,17 +756,22 @@ AUDIO=${AUDIO##*#}
 AUDIO=${AUDIO%%\: *}
 AUDIO=${AUDIO%%(*}
 
-CHANNELLAYOUT=$(ffprobe -show_streams -select_streams a:$AUDIO "${1}" 2> /dev/null |grep "^channel_layout=")
+CHANNELLAYOUT=$(ffprobe -show_streams -select_streams ${AUDIO#*:} "${1}" 2> /dev/null |grep "^channel_layout=")
 CHANNELLAYOUT=${CHANNELLAYOUT##*=}
 CHANNELLAYOUT=${CHANNELLAYOUT%%(*}
 
-CURAUDIOBITRATE=$(ffprobe -show_streams -select_streams a:$AUDIO "${1}" 2> /dev/null |grep "^bit_rate=")
+CURAUDIOBITRATE=$(ffprobe -show_streams -select_streams ${AUDIO#*:} "${1}" 2> /dev/null |grep "^bit_rate=")
 CURAUDIOBITRATE=${CURAUDIOBITRATE##*=}
-CURAUDIOBITRATE=${CURAUDIOBITRATE::-3}
-if [ -n "${CURVIDEOBITRATE}" ]; then
-	SC="Stream copy (${CURAUDIOBITRATE}kbps)"
+if [ "${CURAUDIOBITRATE}" != "N\/A" ]; then
+	CURAUDIOBITRATE=${CURAUDIOBITRATE::-3}
+	if [ -n "${CURAUDIOBITRATE}" ]; then
+		SC="Stream copy (${CURAUDIOBITRATE}kbps)"
+	else
+		SC="Stream copy (VBR)"
+	fi
 else
 	SC="Stream copy (VBR)"
+	CURAUDIOBITRATE=""
 fi
 
 AUDIOBITRATES=("128 (kbps ${CHANNELLAYOUT} channel)" "160 (kbps ${CHANNELLAYOUT} channel)" "192 (kbps ${CHANNELLAYOUT} channel)" "384 (kbps ${CHANNELLAYOUT} channel)" "${SC}")
@@ -770,7 +781,7 @@ AUDIOBITRATE=${AUDIOBITRATE%% (*}
 if [ "Stream copy" = "${AUDIOBITRATE}" ]; then
 	AUDIOCMD="-c:a copy"
 else
-	AUDIOCMD="-c:a aac -b:a ${AUDIOBITRATE}k -af \"channelmap=channel_layout=${CHANNELLAYOUT}\""
+	AUDIOCMD="-c:a aac -b:a ${AUDIOBITRATE}k -af 'channelmap=channel_layout=${CHANNELLAYOUT}'"
 fi
 
 SECONDS=$(ffmpeg -i "$1" 2>&1 |grep Duration | cut -d ' ' -f 4 | sed s/,// | sed 's@\..*@@g' | awk '{ split($1, A, ":"); split(A[3], B, "."); print 3600*A[1] + 60*A[2] + B[1] }')
@@ -787,7 +798,72 @@ if [ "${TYPE}" = "Sample" ]; then
 	LENGTH="-t ${SAMPLELENGTH}"
 fi
 
-if [ "${VIDEOFORMAT}" = "Transcode to x265 with a new variable bitrate" ]; then
+SUBS=(Yes No)
+menuFromArr SUB "Copy subtitles if they exist?" "${SUBS[@]}"
+if [ "$SUB" = "Yes" ]; then
+	SUB="-map 0:s? -c:s copy"
+else
+	SUB=""
+fi
+
+rm -rf /tmp/ffmkv/${TIMESTAMP}
+mkdir -p /tmp/ffmkv/${TIMESTAMP}
+
+if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
+	WIDTH=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^width=")
+	WIDTH=${WIDTH##*=}
+	HEIGHT=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^height=")
+	HEIGHT=${HEIGHT##*=}
+	ASPECT=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^display_aspect_ratio=")
+	ASPECT=${ASPECT##*=}
+	ASPECTWIDTH=${ASPECT%:*}
+	ASPECTHEIGHT=${ASPECT#*:}
+	RESOLUTIONS=()
+	if (( WIDTH >= 7680 )); then
+		NEWHEIGHT=$(round 7680/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+		RESOLUTIONS+=("7680x${NEWHEIGHT}")
+		if [ "${WIDTH}" = 7680 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+			FOUNDRES=true
+		fi
+	fi
+	if (( WIDTH >= 3840 )); then
+		NEWHEIGHT=$(round 3840/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+		RESOLUTIONS+=("3840x${NEWHEIGHT}")
+		if [ "${WIDTH}" = 3840 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+			FOUNDRES=true
+		fi
+	fi
+	if (( WIDTH >= 2560 )); then
+		NEWHEIGHT=$(round 2560/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+		RESOLUTIONS+=("2560x${NEWHEIGHT}")
+		if [ "${WIDTH}" = 2560 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+			FOUNDRES=true
+		fi
+	fi
+	if (( WIDTH >= 1920 )); then
+		NEWHEIGHT=$(round 1920/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+		RESOLUTIONS+=("1920x${NEWHEIGHT}")
+		if [ "${WIDTH}" = 1920 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+			FOUNDRES=true
+		fi
+	fi
+	if (( WIDTH >= 1280 )); then
+		NEWHEIGHT=$(round 1280/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
+		RESOLUTIONS+=("1280x${NEWHEIGHT}")
+		if [ "${WIDTH}" = 1280 ] && [ "${HEIGHT}" = "${NEWHEIGHT}" ]; then
+			FOUNDRES=true
+		fi
+	fi
+	if [ -z "${FOUNDRES}" ]; then
+		RESOLUTIONS+=("${WIDTH}x${HEIGHT}")
+	fi
+	menuFromArr RESOLUTION "What resolution?" "${RESOLUTIONS[@]}"
+	NEWWIDTH=${RESOLUTION%x*}
+	NEWHEIGHT=${RESOLUTION#*x}
+	if [ "${WIDTH}" != "${NEWWIDTH}" ] || [ "${HEIGHT}" != "${NEWHEIGHT}" ]; then
+		SCALE="-vf scale='${NEWWIDTH}:${NEWHEIGHT}'"
+	fi
+
 	CONVERTTYPES=("Target a total file size" "Target by gigs per hour of video")
 	menuFromArr CONVERTTYPE "How would you like to convert?" "${CONVERTTYPES[@]}"
 
@@ -809,7 +885,7 @@ if [ "${VIDEOFORMAT}" = "Transcode to x265 with a new variable bitrate" ]; then
 
 	BITRATE=$(( $MEGSIZE * 8192 / $SECONDS ))
 	if [ "Stream copy" = "${AUDIOBITRATE}" ]; then
-		if [ -n "${CURVIDEOBITRATE}" ]; then
+		if [ -n "${CURAUDIOBITRATE}" ]; then
 			BITRATE=$(( $BITRATE - $CURAUDIOBITRATE ))
 		else
 			echo "Audio is Stream Copy VBR, filesize will be greater than estimated."
@@ -818,37 +894,66 @@ if [ "${VIDEOFORMAT}" = "Transcode to x265 with a new variable bitrate" ]; then
 		BITRATE=$(( $BITRATE - $AUDIOBITRATE ))
 	fi
 
-	COLORSPACE=$(ffprobe -show_streams -select_streams v:$AUDIO "${1}" 2> /dev/null |grep "^color_space=")
+	COLORSPACE=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^color_space=")
 	COLORSPACE=${COLORSPACE##*=}
-	COLORTRANSFER=$(ffprobe -show_streams -select_streams v:$AUDIO "${1}" 2> /dev/null |grep "^color_transfer=")
+	COLORTRANSFER=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^color_transfer=")
 	COLORTRANSFER=${COLORTRANSFER##*=}
-	COLORPRIMARIES=$(ffprobe -show_streams -select_streams v:$AUDIO "${1}" 2> /dev/null |grep "^color_primaries=")
+	COLORPRIMARIES=$(ffprobe -show_streams -select_streams ${VIDEO#*:} "${1}" 2> /dev/null |grep "^color_primaries=")
 	COLORPRIMARIES=${COLORPRIMARIES##*=}
 
 	# Handle HDR
+	PARAMS=""
 	if [ "${COLORSPACE}" = "bt2020nc" ] && [ "${COLORTRANSFER}" = "smpte2084" ] && [ "${COLORPRIMARIES}" = "bt2020" ]; then
-		echo "Preserving HDR video."
-		PARAMS=":colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
+		COLORTYPES=("Preserve HDR color" "Convert to SDR color")
+		menuFromArr COLORTYPE "This is an HDR video, how would you like to handle color?" "${COLORTYPES[@]}"
+		if [ "${COLORTYPE}" = "Preserve HDR color" ]; then
+			PARAMS="colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
+		else
+			SDR="-vf 'zscale=transfer=linear,tonemap=tonemap=clip:param=1.0:desat=2:peak=0,zscale=transfer=bt709,format=yuv420p'"
+		fi
 	fi
 
-	trans() {
-		ffmpeg ${START} -y -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -map 0:s? -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" -an -f matroska /dev/null
-	}
-	echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
-	echo "Process will sit on 100% while ffmpeg closes out functions."
-	convertFile "$1" "$2"
-	trans() {
-		ffmpeg ${START} -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -map 0:s? -c:s copy -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${AUDIOCMD} "$2"
-	}
-	echo ""
-	echo "Processing pass 2 of VBR video, remaining time is total remaining time."
-	echo "Process will sit on 100% while ffmpeg closes out functions."
-	convertFile "$1" "$2"
+	if [[ "${VIDEOFORMAT}" == *"variable bitrate" ]]; then
+		if [ -n "${PARAMS}" ]; then
+			PARAMS=":${PARAMS}"
+		fi
+		trans() {
+			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+		}
+		echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
+		echo "Process will sit on 100% while ffmpeg closes out functions."
+		convertFile "$1" "$2" Pass1
+		trans() {
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+		}
+		echo ""
+		echo "Processing pass 2 of VBR video, remaining time is total remaining time."
+		echo "Process will sit on 100% while ffmpeg closes out functions."
+		convertFile "$1" "$2" Pass2
+	else
+		if [ -n "${PARAMS}" ]; then
+			PARAMS="-x265-params '${PARAMS}'"
+		fi
+		trans() {
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${SDR} ${SCALE} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${SCALE} ${SDR} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+		}
+		echo ""
+		echo "Processing pass of CBR video, remaining time is total remaining time."
+		echo "Process will sit on 100% while ffmpeg closes out functions."
+		convertFile "$1" "$2" Pass1
+	fi
 else
 	trans() {
-		ffmpeg ${START} -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -map 0:s? -c:s copy -c:v copy ${AUDIOCMD} "$2"
+		echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+		eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 	}
 	echo "Processing a stream copy of video, remaining time is total remaining time."
 	echo "Process will sit on 100% while ffmpeg closes out functions."
-	convertFile "$1" "$2"
+	convertFile "$1" "$2" Pass1
 fi
+
+exit
+}
