@@ -798,13 +798,13 @@ mkPreset \
   "Target by gigs per hour of video" \
   "4" \
   "Preserve HDR color" \
-  "${HOME}/.ffmkv/presets/Up to 3840p, original audio, 4GB per hour VBR, HDR"
+  "${HOME}/.ffmkv/presets/Up to 4K, original audio, 4GB per hour VBR, HDR"
 
 function usage() {
 	echo "Usage: ffmkv [--preset '<preset>'] <input> <ouput>"
   echo "Examples:"
   echo "  ffmkv input.mkv output.mkv"
-  echo "  ffmkv --preset 'Up to 3840p, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv"
+  echo "  ffmkv --preset 'Up to 4K, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv"
 	exit 1
 }
 

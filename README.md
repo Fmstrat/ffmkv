@@ -36,7 +36,7 @@ ffmkv --preset '<preset>' <input> <output>
 Examples:
 ```
 ffmkv input.mkv output.mkv
-ffmkv --preset 'Up to 3840p, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv
+ffmkv --preset 'Up to 4K, original audio, 4GB per hour VBR, HDR' input.mkv output.mkv
 ```
 
 ## Presets
