@@ -876,7 +876,11 @@ else
 fi
 
 if [ -z "${VIDEOFORMAT}" ]; then
-  VIDEOFORMATS=("Transcode to x265 with a 2-pass variable bitrate" "Transcode to x265 with a 1-pass constant bitrate" "${SC}")
+  VIDEOFORMATS=("Transcode to x265 with a 2-pass variable bitrate" \
+                "Transcode to x265 with a 1-pass constant bitrate" \
+                "Transcode to x264 with a 2-pass variable bitrate" \
+                "Transcode to x264 with a 1-pass constant bitrate" \
+                "${SC}")
   menuFromArr VIDEOFORMAT "How would you like to handle video conversion?" "${VIDEOFORMATS[@]}"
 fi
 
@@ -930,7 +934,7 @@ FRAMES=$(round $SECONDS*$FPS 0)
 
 if [ -z "${TYPE}" ]; then
   TYPES=(Sample Full)
-  menuFromArr TYPE "Make a 2 minute sample or process the full file?" "${TYPES[@]}"
+  menuFromArr TYPE "Make a sample or process the full file?" "${TYPES[@]}"
 fi
 if [ "${TYPE}" = "Sample" ]; then
 	SAMPLELENGTHS=(15 30 60 90 120)
@@ -1002,10 +1006,9 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
         FOUNDRES=true
       fi
     fi
-    if [ -z "${FOUNDRES}" ]; then
-      RESOLUTIONS+=("${WIDTH}x${HEIGHT}")
-    fi
+    RESOLUTIONS+=("${WIDTH}x${HEIGHT} (Original)")
     menuFromArr RESOLUTION "What resolution?" "${RESOLUTIONS[@]}"
+    RESOLUTION=${RESOLUTION%% (*}
     NEWWIDTH=${RESOLUTION%x*}
     NEWHEIGHT=${RESOLUTION#*x}
   else
@@ -1017,10 +1020,18 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
       NEWHEIGHT=$(round ${MAXWIDTH}/${ASPECTWIDTH}*${ASPECTHEIGHT} 0)
     fi
   fi
-	if [ "${WIDTH}" != "${NEWWIDTH}" ] || [ "${HEIGHT}" != "${NEWHEIGHT}" ]; then
-		#SCALE="scale=${NEWWIDTH}:${NEWHEIGHT}"
-		SCALE="zscale=w=${NEWWIDTH}:h=${NEWHEIGHT}"
-	fi
+  if [ "${WIDTH}" != "${NEWWIDTH}" ] || [ "${HEIGHT}" != "${NEWHEIGHT}" ]; then
+    #SCALE="scale=${NEWWIDTH}:${NEWHEIGHT}"
+    SCALE="zscale=w=${NEWWIDTH}:h=${NEWHEIGHT}"
+  fi
+
+  if [ -z "${PRESET}" ]; then
+    FPSS=("${FPS} (Original)" "30" "60")
+    menuFromArr NEWFPS "What FPS?" "${FPSS[@]}"
+    if [[ "${NEWFPS}" != *"Original"* ]]; then
+      FPSCMD="-filter:v fps=fps=${NEWFPS}"
+    fi
+  fi
 
   if [ -z "${CONVERTTYPE}" ]; then
 	  CONVERTTYPES=("Target a total file size" "Target by gigs per hour of video")
@@ -1032,7 +1043,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
       GBSIZES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
       menuFromArr GBSIZE "How many GB for final size?" "${GBSIZES[@]}"
     else
-      GBSIZES=(1 2 3 4 5 6)
+      GBSIZES=(1 2 3 4 5 6 7 8)
       menuFromArr GBSIZE "How many GB per hour of video?" "${GBSIZES[@]}"
 	  fi
   fi
@@ -1085,20 +1096,25 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     VIDEOFILTERS="-vf '${SDR}'"
   fi
 
+	if [[ "${VIDEOFORMAT}" == *"x265"* ]]; then
+		VFORMAT=265
+        else
+		VFORMAT=264
+	fi
 	if [[ "${VIDEOFORMAT}" == *"variable bitrate" ]]; then
 		if [ -n "${PARAMS}" ]; then
 			PARAMS=":${PARAMS}"
 		fi
 		trans() {
-			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
-			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
 		}
 		echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
 		echo "Process will sit on 100% while ffmpeg closes out functions."
 		convertFile "$1" "$2" Pass1
 		trans() {
-			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
-			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k -x265-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 		}
 		echo ""
 		echo "Processing pass 2 of VBR video, remaining time is total remaining time."
@@ -1106,11 +1122,11 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 		convertFile "$1" "$2" Pass2
 	else
 		if [ -n "${PARAMS}" ]; then
-			PARAMS="-x265-params '${PARAMS}'"
+			PARAMS="-x${VFORMAT}-params '${PARAMS}'"
 		fi
 		trans() {
-			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
-			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx265 -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} ${FPSCMD} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} ${FPSCMD} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 		}
 		echo ""
 		echo "Processing pass of CBR video, remaining time is total remaining time."
