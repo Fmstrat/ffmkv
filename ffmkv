@@ -1111,14 +1111,14 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 #      NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
 #      NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
       THREADSCMD="-threads ${NEWTHREADS}"
-      echo ${THREADSCMD}			#this is for testing
     else
       THREADSCMD="-threads 0"
     fi
   else
     THREADSCMD="-threads ${THREADS}"
   fi
-
+      echo ${THREADSCMD}			#this is for testing
+      
 	if [[ "${VIDEOFORMAT}" == *"x265"* ]]; then
 		VFORMAT=265
         else
