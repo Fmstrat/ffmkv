@@ -1104,7 +1104,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
   
   if [ -z "${THREADS}" ]; then
     TOTALTHREADS=$(grep -c ^processor /proc/cpuinfo)
-    HTHREADS=( "Auto: $TOTALTHREADS Threads" "75%: $(( ${TOTALTHREADS}/4*3 )) Threads" "50%: $(( ${TOTALTHREADS}/2 )) Threads" "33%: $(( ${TOTALTHREADS}/3 )) Threads" "25%: $(( ${TOTALTHREADS}/4 )) Threads" )
+    HTHREADS=( "Auto: ${TOTALTHREADS} Threads" "75%: $(( ${TOTALTHREADS}/4*3 )) Threads" "50%: $(( ${TOTALTHREADS}/2 )) Threads" "33%: $(( ${TOTALTHREADS}/3 )) Threads" "25%: $(( ${TOTALTHREADS}/4 )) Threads" )
     menuFromArr NEWTHREADS "How Many Threads?" "${HTHREADS[@]}"
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
       NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
