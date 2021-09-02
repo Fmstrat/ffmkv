@@ -1113,7 +1113,8 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
       NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
       NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
-      THREADSCMD="-threads ${NEWTHREADS:5}"
+      THREADSCMD="-threads ${NEWTHREADS}"
+      echo $THREADSCMD
     else
       THREADSCMD="-threads 0"
     fi
