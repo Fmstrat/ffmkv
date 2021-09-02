@@ -1126,7 +1126,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 		fi
 		trans() {
 			echo ffmpeg ${START} -y -vsync 0 ${THREADSCMD} -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
-			eval ffmpeg ${START} -y -vsync 0 -${THREADSCMD} i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+			eval ffmpeg ${START} -y -vsync 0 ${THREADSCMD} -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
 		}
 		echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
 		echo "Process will sit on 100% while ffmpeg closes out functions."
@@ -1154,7 +1154,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 	fi
 else
 	trans() {
-		echo ffmpeg ${START} -vsync 0 -${THREADSCMD} i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
+		echo ffmpeg ${START} -vsync 0 ${THREADSCMD} -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
 		eval ffmpeg ${START} -vsync 0 ${THREADSCMD} -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
 	}
 	echo "Processing a stream copy of video, remaining time is total remaining time."
