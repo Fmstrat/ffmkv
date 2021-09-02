@@ -1108,7 +1108,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     THREADSB=$(( ${TOTALTHREADS}/2 )) #50%
     THREADSC=$(( ${TOTALTHREADS}/3 )) #33%
     THREADSD=$(( ${TOTALTHREADS}/4 )) #25%
-    HTHREADS=( ${TOTALTHREADS} $(( ${TOTALTHREADS}/4*3 )) $(( ${TOTALTHREADS}/2 )) $(( ${TOTALTHREADS}/3 )) $(( ${TOTALTHREADS}/4 )) )
+    HTHREADS=( Auto:${TOTALTHREADS} $(( ${TOTALTHREADS}/4*3 )) $(( ${TOTALTHREADS}/2 )) $(( ${TOTALTHREADS}/3 )) $(( ${TOTALTHREADS}/4 )) )
 #    HTHREADS=( "Auto: ${TOTALTHREADS} Threads" "75%: ${THREADSA} Threads" "50%: ${THREADSB} Threads" "33%: ${THREADSC} Threads" "25%: ${THREADSD} Threads" )
     menuFromArr NEWTHREADS "How Many Threads? Recommend no less than 4 threads" "${HTHREADS[@]}"
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
