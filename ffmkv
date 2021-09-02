@@ -1108,10 +1108,10 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     50THREADS=$(( $TOTALTHREADS / 2 ))
     33THREADS=$(( $TOTALTHREADS / 3 ))
     25THREADS=$(( $TOTALTHREADS / 4 ))
-    HTHREADS=( "Auto: $TOTALTHREADS Threads" "75%: $75THREADS Threads" "50%: $50THREADS Threads" "33%: $33THREADS Threads" "25%: $25THREADS Threads" )
+    HTHREADS=( "Auto $TOTALTHREADS Threads" "75% $75THREADS Threads" "50% $50THREADS Threads" "33% $33THREADS Threads" "25% $25THREADS Threads" )
     menuFromArr NEWTHREADS "How Many Threads? Recommended min 4 threads" "${HTHREADS[@]}"
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
-      NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
+      NEWTHREADS=${NEWTHREADS:4}		#remove first 4 characters
       NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
       THREADSCMD="-threads ${NEWTHREADS}"
     else
