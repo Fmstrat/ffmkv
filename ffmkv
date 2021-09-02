@@ -757,10 +757,7 @@ GBSIZE=${10}
 
 # How to handle HDR if it exists in the source
 COLORTYPE='${11}'
-
-# How many threads would you like to use? (Auto = 0)
-THREADS=${12}
-" > "${13}"
+" > "${12}"
 }
 
 mkPreset \
@@ -775,7 +772,6 @@ mkPreset \
   "Target by gigs per hour of video" \
   "1" \
   "Convert to SDR color" \
-  "0" \
   "${HOME}/.ffmkv/presets/Up to 1080p, 192k audio, 1GB per hour CBR, SDR"
 
 mkPreset \
@@ -790,7 +786,6 @@ mkPreset \
   "Target by gigs per hour of video" \
   "2" \
   "Preserve HDR color" \
-  "0" \
   "${HOME}/.ffmkv/presets/Up to 1080p, original audio, 2GB per hour VBR, HDR"
 
 mkPreset \
@@ -805,7 +800,6 @@ mkPreset \
   "Target by gigs per hour of video" \
   "4" \
   "Preserve HDR color" \
-  "0" \
   "${HOME}/.ffmkv/presets/Up to 4K, original audio, 4GB per hour VBR, HDR"
 
 function usage() {
@@ -1118,7 +1112,7 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     THREADSCMD="-threads ${THREADS}"
   fi
       echo ${THREADSCMD}			#this is for testing
-      
+
 	if [[ "${VIDEOFORMAT}" == *"x265"* ]]; then
 		VFORMAT=265
         else
@@ -1129,15 +1123,19 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 			PARAMS=":${PARAMS}"
 		fi
 		trans() {
+
 			echo ffmpeg ${START} -y -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
 			eval ffmpeg ${START} -y -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=1${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 -an -f matroska /dev/null
+
 		}
 		echo "Processing pass 1 of VBR video, remaining time is remaining time for pass 1 only."
 		echo "Process will sit on 100% while ffmpeg closes out functions."
 		convertFile "$1" "$2" Pass1
 		trans() {
+
 			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
 			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${FPSCMD} -x${VFORMAT}-params "pass=2${PARAMS}" ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+
 		}
 		echo ""
 		echo "Processing pass 2 of VBR video, remaining time is total remaining time."
@@ -1148,8 +1146,10 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 			PARAMS="-x${VFORMAT}-params '${PARAMS}'"
 		fi
 		trans() {
+
 			echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} ${FPSCMD} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
 			eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} ${FPSCMD} -c:v libx${VFORMAT} ${THREADSCMD} -b:v ${BITRATE}k ${PARAMS} ${VIDEOFILTERS} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+
 		}
 		echo ""
 		echo "Processing pass of CBR video, remaining time is total remaining time."
@@ -1158,8 +1158,10 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
 	fi
 else
 	trans() {
+
 		echo ffmpeg ${START} -vsync 0 -i "$1" ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy ${THREADSCMD} -max_muxing_queue_size 9999 ${AUDIOCMD} "$2"
 		eval ffmpeg ${START} -vsync 0 -i '"$1"' ${LENGTH} -map ${VIDEO} -map ${AUDIO} ${SUB} -c:v copy ${THREADSCMD} -max_muxing_queue_size 9999 ${AUDIOCMD} '"$2"'
+
 	}
 	echo "Processing a stream copy of video, remaining time is total remaining time."
 	echo "Process will sit on 100% while ffmpeg closes out functions."
