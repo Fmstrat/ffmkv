@@ -1108,13 +1108,14 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     THREADSB=$(( ${TOTALTHREADS}/2 )) #50%
     THREADSC=$(( ${TOTALTHREADS}/3 )) #33%
     THREADSD=$(( ${TOTALTHREADS}/4 )) #25%
-    HTHREADS=( "Auto: ${TOTALTHREADS} Threads" "75%: ${THREADSA} Threads" "50%: ${THREADSB} Threads" "33%: ${THREADSC} Threads" "25%: ${THREADSD} Threads" )
+    HTHREADS=( ${TOTALTHREADS} $(( ${TOTALTHREADS}/4*3 )) $(( ${TOTALTHREADS}/2 )) $(( ${TOTALTHREADS}/3 )) $(( ${TOTALTHREADS}/4 )) )
+#    HTHREADS=( "Auto: ${TOTALTHREADS} Threads" "75%: ${THREADSA} Threads" "50%: ${THREADSB} Threads" "33%: ${THREADSC} Threads" "25%: ${THREADSD} Threads" )
     menuFromArr NEWTHREADS "How Many Threads? Recommend no less than 4 threads" "${HTHREADS[@]}"
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
-      NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
-      NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
+#      NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
+#      NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
       THREADSCMD="-threads ${NEWTHREADS}"
-      echo $THREADSCMD
+      echo ${THREADSCMD}
     else
       THREADSCMD="-threads 0"
     fi
