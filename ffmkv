@@ -1111,6 +1111,8 @@ if [[ "${VIDEOFORMAT}" == "Transcode"* ]]; then
     HTHREADS=( "Auto: ${TOTALTHREADS} Threads" "75%: ${THREADSA} Threads" "50%: ${THREADSB} Threads" "33%: ${THREADSC} Threads" "25%: ${THREADSD} Threads" )
     menuFromArr NEWTHREADS "How Many Threads? Recommend no less than 4 threads" "${HTHREADS[@]}"
     if [[ "${NEWTHREADS}" != *"Auto"* ]]; then
+      NEWTHREADS=${NEWTHREADS:5}		#remove first 5 characters
+      NEWTHREADS=${NEWTHREADS%" Threads"}	#remove " Threads" from end
       THREADSCMD="-threads ${NEWTHREADS:5}"
     else
       THREADSCMD="-threads 0"
